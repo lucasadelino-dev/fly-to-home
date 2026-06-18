@@ -66,18 +66,52 @@ public class PombosController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(Pombo pombo)
     {
-        db.Pombos.Add(pombo);
-        await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetById), new { id = pombo.Id }, pombo);
+        try
+        {
+            db.Pombos.Add(pombo);
+            await db.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetById), new { id = pombo.Id }, pombo);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return Conflict(new { message = "Já existe um pombo com esta anilha." });
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = "Erro ao salvar o pombo. Verifique os dados informados." });
+        }
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, Pombo pombo)
     {
-        if (id != pombo.Id) return BadRequest();
-        db.Entry(pombo).State = EntityState.Modified;
-        await db.SaveChangesAsync();
-        return NoContent();
+        if (id != pombo.Id) return BadRequest(new { message = "ID inválido." });
+        var existing = await db.Pombos.FindAsync(id);
+        if (existing == null) return NotFound();
+
+        existing.Anilha = pombo.Anilha;
+        existing.Nome = pombo.Nome;
+        existing.Sexo = pombo.Sexo;
+        existing.DataNascimento = pombo.DataNascimento;
+        existing.Cor = pombo.Cor;
+        existing.Origem = pombo.Origem;
+        existing.Status = pombo.Status;
+        existing.PaiId = pombo.PaiId;
+        existing.MaeId = pombo.MaeId;
+
+        try
+        {
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return Conflict(new { message = "Já existe um pombo com esta anilha." });
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = "Erro ao atualizar o pombo." });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -85,8 +119,21 @@ public class PombosController(AppDbContext db) : ControllerBase
     {
         var pombo = await db.Pombos.FindAsync(id);
         if (pombo == null) return NotFound();
-        db.Pombos.Remove(pombo);
-        await db.SaveChangesAsync();
-        return NoContent();
+        try
+        {
+            db.Pombos.Remove(pombo);
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "Não é possível remover este pombo pois ele possui registros vinculados (saúde, acasalamentos ou competições)." });
+        }
     }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException?.Message.Contains("UNIQUE") == true ||
+        ex.InnerException?.Message.Contains("unique") == true ||
+        ex.InnerException?.Message.Contains("IX_") == true ||
+        ex.InnerException?.Message.Contains("duplicate") == true;
 }

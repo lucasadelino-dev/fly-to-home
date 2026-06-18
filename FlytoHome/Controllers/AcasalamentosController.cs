@@ -31,18 +31,43 @@ public class AcasalamentosController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(Acasalamento acasalamento)
     {
-        db.Acasalamentos.Add(acasalamento);
-        await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetById), new { id = acasalamento.Id }, acasalamento);
+        try
+        {
+            db.Acasalamentos.Add(acasalamento);
+            await db.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetById), new { id = acasalamento.Id }, acasalamento);
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = "Erro ao salvar o acasalamento. Verifique os dados informados." });
+        }
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, Acasalamento acasalamento)
     {
-        if (id != acasalamento.Id) return BadRequest();
-        db.Entry(acasalamento).State = EntityState.Modified;
-        await db.SaveChangesAsync();
-        return NoContent();
+        if (id != acasalamento.Id) return BadRequest(new { message = "ID inválido." });
+        var existing = await db.Acasalamentos.FindAsync(id);
+        if (existing == null) return NotFound();
+
+        existing.MachoId = acasalamento.MachoId;
+        existing.FemeaId = acasalamento.FemeaId;
+        existing.DataUniao = acasalamento.DataUniao;
+        existing.QuantidadeOvos = acasalamento.QuantidadeOvos;
+        existing.FilhotesNascidos = acasalamento.FilhotesNascidos;
+        existing.PrevisaoNascimento = acasalamento.PrevisaoNascimento;
+        existing.Status = acasalamento.Status;
+        existing.Observacoes = acasalamento.Observacoes;
+
+        try
+        {
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = "Erro ao atualizar o acasalamento." });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -50,8 +75,15 @@ public class AcasalamentosController(AppDbContext db) : ControllerBase
     {
         var a = await db.Acasalamentos.FindAsync(id);
         if (a == null) return NotFound();
-        db.Acasalamentos.Remove(a);
-        await db.SaveChangesAsync();
-        return NoContent();
+        try
+        {
+            db.Acasalamentos.Remove(a);
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "Não é possível remover este acasalamento pois ele possui registros vinculados." });
+        }
     }
 }

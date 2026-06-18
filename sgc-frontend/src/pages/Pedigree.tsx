@@ -43,7 +43,8 @@ export default function Pedigree() {
 
   const pai = tree?.pai;
   const mae = tree?.mae;
-  const avos = [pai?.pai, pai?.mae, mae?.pai, mae?.mae].filter(Boolean) as PedigreeNode[];
+  const avosRaw = [pai?.pai, pai?.mae, mae?.pai, mae?.mae].filter(Boolean) as PedigreeNode[];
+  const avos = avosRaw.filter((av, i, arr) => arr.findIndex(x => x.id === av.id) === i);
 
   return (
     <div className="page">

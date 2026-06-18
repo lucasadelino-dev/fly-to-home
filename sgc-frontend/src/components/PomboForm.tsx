@@ -1,6 +1,7 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 import type { Pombo, SexoPombo, StatusPombo } from "../types";
+import { toast } from "../toast";
 
 interface FormState {
   anilha: string; nome: string; sexo: SexoPombo; dataNascimento: string;
@@ -17,6 +18,7 @@ const emptyForm: FormState = {
 
 export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) {
   const [form, setForm] = useState<FormState>({ ...emptyForm });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (initial) {
@@ -37,14 +39,23 @@ export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
     const payload = {
       ...form,
       paiId: form.paiId ? Number(form.paiId) : null,
       maeId: form.maeId ? Number(form.maeId) : null,
     };
-    if (initial) await api.put(`/pombos/${initial.id}`, { id: initial.id, ...payload });
-    else await api.post("/pombos", payload);
-    onSaved();
+    try {
+      if (initial) await api.put(`/pombos/${initial.id}`, { id: initial.id, ...payload });
+      else await api.post("/pombos", payload);
+      toast.success(initial ? "Pombo atualizado com sucesso." : "Pombo cadastrado com sucesso.");
+      onSaved();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao salvar o pombo.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const machos = pombos.filter((p) => p.sexo === "Macho");
@@ -53,7 +64,6 @@ export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <h3>{initial ? "Editar Pombo" : "Adicionar Pombo"}</h3>
           <button className="icon-btn" onClick={onClose} style={{ border: "none" }}>
@@ -64,31 +74,17 @@ export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) 
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Row 1: Anilha + Nome */}
           <div className="form-row">
             <div className="form-group">
               <label>Anilha *</label>
-              <input
-                className="form-control"
-                required
-                placeholder="BR2024-001"
-                value={form.anilha}
-                onChange={(e) => set("anilha", e.target.value)}
-              />
+              <input className="form-control" required placeholder="BR2024-001" value={form.anilha} onChange={(e) => set("anilha", e.target.value)} />
             </div>
             <div className="form-group">
               <label>Nome *</label>
-              <input
-                className="form-control"
-                required
-                placeholder="Thunder"
-                value={form.nome}
-                onChange={(e) => set("nome", e.target.value)}
-              />
+              <input className="form-control" required placeholder="Thunder" value={form.nome} onChange={(e) => set("nome", e.target.value)} />
             </div>
           </div>
 
-          {/* Row 2: Sexo + Data */}
           <div className="form-row">
             <div className="form-group">
               <label>Sexo</label>
@@ -98,40 +94,22 @@ export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) 
               </select>
             </div>
             <div className="form-group">
-              <label>Data de Nascimento</label>
-              <input
-                type="date"
-                className="form-control"
-                required
-                value={form.dataNascimento}
-                onChange={(e) => set("dataNascimento", e.target.value)}
-              />
+              <label>Data de Nascimento *</label>
+              <input type="date" className="form-control" required value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
             </div>
           </div>
 
-          {/* Row 3: Cor + Origem */}
           <div className="form-row">
             <div className="form-group">
               <label>Cor</label>
-              <input
-                className="form-control"
-                placeholder="Azul"
-                value={form.cor}
-                onChange={(e) => set("cor", e.target.value)}
-              />
+              <input className="form-control" placeholder="Azul" value={form.cor} onChange={(e) => set("cor", e.target.value)} />
             </div>
             <div className="form-group">
               <label>Origem</label>
-              <input
-                className="form-control"
-                placeholder="Brasil"
-                value={form.origem}
-                onChange={(e) => set("origem", e.target.value)}
-              />
+              <input className="form-control" placeholder="Brasil" value={form.origem} onChange={(e) => set("origem", e.target.value)} />
             </div>
           </div>
 
-          {/* Row 4: Status full width */}
           <div className="form-group">
             <label>Status</label>
             <select className="form-control" value={form.status} onChange={(e) => set("status", e.target.value as StatusPombo)}>
@@ -141,7 +119,6 @@ export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) 
             </select>
           </div>
 
-          {/* Row 5: Pai + Mãe */}
           <div className="form-row">
             <div className="form-group">
               <label>Pai</label>
@@ -163,10 +140,11 @@ export default function PomboForm({ initial, pombos, onClose, onSaved }: Props) 
             </div>
           </div>
 
-          {/* Actions */}
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary">{initial ? "Salvar" : "Cadastrar"}</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? "Salvando..." : initial ? "Salvar" : "Cadastrar"}
+            </button>
           </div>
         </form>
       </div>

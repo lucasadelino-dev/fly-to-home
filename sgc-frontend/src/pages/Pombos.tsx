@@ -1,7 +1,8 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 import type { Pombo } from "../types";
 import PomboForm from "../components/PomboForm";
+import { toast } from "../toast";
 
 function IconEdit() {
   return (
@@ -33,9 +34,15 @@ export default function Pombos() {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Pombo | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const load = (q = "") =>
-    api.get<Pombo[]>("/pombos", { params: { search: q } }).then((r) => setPombos(r.data));
+  const load = (q = "") => {
+    setLoading(true);
+    return api.get<Pombo[]>("/pombos", { params: { search: q } })
+      .then((r) => setPombos(r.data))
+      .catch(() => toast.error("Erro ao carregar os pombos."))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => { load(); }, []);
 
@@ -46,8 +53,14 @@ export default function Pombos() {
 
   const del = async (id: number) => {
     if (!confirm("Remover pombo?")) return;
-    await api.delete(`/pombos/${id}`);
-    load(search);
+    try {
+      await api.delete(`/pombos/${id}`);
+      toast.success("Pombo removido com sucesso.");
+      load(search);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao remover o pombo.";
+      toast.error(msg);
+    }
   };
 
   const statusClass = (s: string) => {
@@ -81,38 +94,44 @@ export default function Pombos() {
       </div>
 
       <div className="table-card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Anilha</th><th>Nome</th><th>Sexo</th><th>Data Nasc.</th>
-              <th>Cor</th><th>Origem</th><th>Status</th><th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pombos.map((p) => (
-              <tr key={p.id}>
-                <td><span className="anilha-badge">{p.anilha}</span></td>
-                <td className="font-medium">{p.nome}</td>
-                <td>{p.sexo}</td>
-                <td>{new Date(p.dataNascimento).toLocaleDateString("pt-BR")}</td>
-                <td>{p.cor}</td>
-                <td>{p.origem || "—"}</td>
-                <td><span className={statusClass(p.status)}>{p.status}</span></td>
-                <td>
-                  <div className="row-actions">
-                    <button className="icon-btn" onClick={() => { setEditing(p); setShowForm(true); }} title="Editar">
-                      <IconEdit />
-                    </button>
-                    <button className="icon-btn icon-btn-danger" onClick={() => del(p.id)} title="Excluir">
-                      <IconTrash />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {pombos.length === 0 && <div className="empty-state">Nenhum pombo encontrado.</div>}
+        {loading ? (
+          <div className="loading" style={{ padding: "48px" }}>Carregando...</div>
+        ) : (
+          <>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Anilha</th><th>Nome</th><th>Sexo</th><th>Data Nasc.</th>
+                  <th>Cor</th><th>Origem</th><th>Status</th><th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pombos.map((p) => (
+                  <tr key={p.id}>
+                    <td><span className="anilha-badge">{p.anilha}</span></td>
+                    <td className="font-medium">{p.nome}</td>
+                    <td>{p.sexo}</td>
+                    <td>{new Date(p.dataNascimento).toLocaleDateString("pt-BR")}</td>
+                    <td>{p.cor}</td>
+                    <td>{p.origem || "—"}</td>
+                    <td><span className={statusClass(p.status)}>{p.status}</span></td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="icon-btn" onClick={() => { setEditing(p); setShowForm(true); }} title="Editar">
+                          <IconEdit />
+                        </button>
+                        <button className="icon-btn icon-btn-danger" onClick={() => del(p.id)} title="Excluir">
+                          <IconTrash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {pombos.length === 0 && <div className="empty-state">Nenhum pombo encontrado.</div>}
+          </>
+        )}
       </div>
 
       {showForm && (

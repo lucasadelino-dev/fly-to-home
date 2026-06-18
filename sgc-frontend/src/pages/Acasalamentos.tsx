@@ -1,6 +1,7 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 import type { Acasalamento, Pombo, StatusAcasalamento } from "../types";
+import { toast } from "../toast";
 
 interface FormState {
   machoId: string; femeaId: string; dataUniao: string;
@@ -21,12 +22,24 @@ const STATUS_BADGE: Record<StatusAcasalamento, string> = {
 export default function Acasalamentos() {
   const [lista, setLista] = useState<Acasalamento[]>([]);
   const [pombos, setPombos] = useState<Pombo[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Acasalamento | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
 
-  const load = () => api.get<Acasalamento[]>("/acasalamentos").then((r) => setLista(r.data));
-  useEffect(() => { load(); api.get<Pombo[]>("/pombos").then((r) => setPombos(r.data)); }, []);
+  const load = () =>
+    api.get<Acasalamento[]>("/acasalamentos").then((r) => setLista(r.data));
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      load(),
+      api.get<Pombo[]>("/pombos").then((r) => setPombos(r.data)),
+    ])
+      .catch(() => toast.error("Erro ao carregar os acasalamentos."))
+      .finally(() => setLoading(false));
+  }, []);
 
   const openNew = () => { setEditing(null); setForm({ ...emptyForm }); setShowForm(true); };
   const openEdit = (a: Acasalamento) => {
@@ -47,21 +60,38 @@ export default function Acasalamentos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
     const payload = {
-      ...form, machoId: Number(form.machoId), femeaId: Number(form.femeaId),
-      quantidadeOvos: Number(form.quantidadeOvos), filhotesNascidos: Number(form.filhotesNascidos),
+      ...form,
+      machoId: Number(form.machoId), femeaId: Number(form.femeaId),
+      quantidadeOvos: Number(form.quantidadeOvos),
+      filhotesNascidos: Number(form.filhotesNascidos),
       previsaoNascimento: form.previsaoNascimento || null,
     };
-    if (editing) await api.put(`/acasalamentos/${editing.id}`, { id: editing.id, ...payload });
-    else await api.post("/acasalamentos", payload);
-    setShowForm(false);
-    load();
+    try {
+      if (editing) await api.put(`/acasalamentos/${editing.id}`, { id: editing.id, ...payload });
+      else await api.post("/acasalamentos", payload);
+      toast.success(editing ? "Acasalamento atualizado." : "Acasalamento registrado com sucesso.");
+      setShowForm(false);
+      await load();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao salvar o acasalamento.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const del = async (id: number) => {
     if (!confirm("Excluir acasalamento?")) return;
-    await api.delete(`/acasalamentos/${id}`);
-    load();
+    try {
+      await api.delete(`/acasalamentos/${id}`);
+      toast.success("Acasalamento removido.");
+      await load();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao remover o acasalamento.";
+      toast.error(msg);
+    }
   };
 
   const machos = pombos.filter((p) => p.sexo === "Macho");
@@ -81,7 +111,6 @@ export default function Acasalamentos() {
         </div>
       </div>
 
-      {/* KPI */}
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="kpi-left"><span className="kpi-label">Acasalamentos</span><span className="kpi-value">{totalAca}</span></div>
@@ -103,7 +132,6 @@ export default function Acasalamentos() {
           <div className="kpi-left"><span className="kpi-label">Total de Ovos</span><span className="kpi-value">{totalOvos}</span></div>
           <div className="kpi-icon" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24" }}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" strokeDasharray="0"/>
               <ellipse cx="12" cy="12" rx="5" ry="7"/>
             </svg>
           </div>
@@ -112,71 +140,73 @@ export default function Acasalamentos() {
           <div className="kpi-left"><span className="kpi-label">Filhotes</span><span className="kpi-value">{totalFilhotes}</span></div>
           <div className="kpi-icon" style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa" }}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <ellipse cx="12" cy="12" rx="5" ry="7"/>
+              <circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/>
             </svg>
           </div>
         </div>
       </div>
 
-      {/* List */}
       <div className="table-card">
         <div className="section-header">
           <h2>Histórico de Acasalamentos</h2>
           <button className="btn btn-primary" onClick={openNew}>+ Novo Acasalamento</button>
         </div>
 
-        <div className="aca-list">
-          {lista.map((a) => (
-            <div key={a.id} className="aca-row-card">
-              <div className="aca-couple-row">
-                <div className="aca-pigeon male">
-                  <span className="sex-badge sex-m">♂</span>
-                  <div>
-                    <div className="pigeon-anilha">{a.macho?.anilha}</div>
-                    <div className="pigeon-nome">{a.macho?.nome}</div>
+        {loading ? (
+          <div className="loading" style={{ padding: "48px" }}>Carregando...</div>
+        ) : (
+          <div className="aca-list">
+            {lista.map((a) => (
+              <div key={a.id} className="aca-row-card">
+                <div className="aca-couple-row">
+                  <div className="aca-pigeon male">
+                    <span className="sex-badge sex-m">♂</span>
+                    <div>
+                      <div className="pigeon-anilha">{a.macho?.anilha}</div>
+                      <div className="pigeon-nome">{a.macho?.nome}</div>
+                    </div>
+                  </div>
+                  <div className="aca-heart">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#f472b6" stroke="#f472b6" strokeWidth="1.5">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                  </div>
+                  <div className="aca-pigeon female">
+                    <span className="sex-badge sex-f">♀</span>
+                    <div>
+                      <div className="pigeon-anilha">{a.femea?.anilha}</div>
+                      <div className="pigeon-nome">{a.femea?.nome}</div>
+                    </div>
+                  </div>
+                  <div className="aca-actions-right">
+                    <span className={`badge ${STATUS_BADGE[a.status]}`}>{STATUS_LABELS[a.status]}</span>
+                    <button className="icon-btn" onClick={() => openEdit(a)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button className="icon-btn icon-btn-danger" onClick={() => del(a.id)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                      </svg>
+                    </button>
                   </div>
                 </div>
-                <div className="aca-heart">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#f472b6" stroke="#f472b6" strokeWidth="1.5">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                  </svg>
+                <div className="aca-details">
+                  <span>📅 Acasalamento: {new Date(a.dataUniao).toLocaleDateString("pt-BR")}</span>
+                  {a.previsaoNascimento && <span>🕐 Previsão: {new Date(a.previsaoNascimento).toLocaleDateString("pt-BR")}</span>}
+                  <span>⭕ Ovos: {a.quantidadeOvos}</span>
+                  {a.filhotesNascidos > 0 && <span className="nascidos">✓ Nascidos: {a.filhotesNascidos}</span>}
                 </div>
-                <div className="aca-pigeon female">
-                  <span className="sex-badge sex-f">♀</span>
-                  <div>
-                    <div className="pigeon-anilha">{a.femea?.anilha}</div>
-                    <div className="pigeon-nome">{a.femea?.nome}</div>
-                  </div>
-                </div>
-                <div className="aca-actions-right">
-                  <span className={`badge ${STATUS_BADGE[a.status]}`}>{STATUS_LABELS[a.status]}</span>
-                  <button className="icon-btn" onClick={() => openEdit(a)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                  </button>
-                  <button className="icon-btn icon-btn-danger" onClick={() => del(a.id)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                    </svg>
-                  </button>
-                </div>
+                {a.observacoes && <div className="aca-obs">{a.observacoes}</div>}
               </div>
-              <div className="aca-details">
-                <span>📅 Acasalamento: {new Date(a.dataUniao).toLocaleDateString("pt-BR")}</span>
-                {a.previsaoNascimento && <span>🕐 Previsão: {new Date(a.previsaoNascimento).toLocaleDateString("pt-BR")}</span>}
-                <span>⭕ Ovos: {a.quantidadeOvos}</span>
-                {a.filhotesNascidos > 0 && <span className="nascidos">✓ Nascidos: {a.filhotesNascidos}</span>}
-              </div>
-              {a.observacoes && <div className="aca-obs">{a.observacoes}</div>}
-            </div>
-          ))}
-          {lista.length === 0 && <div className="empty-state">Nenhum acasalamento registrado.</div>}
-        </div>
+            ))}
+            {lista.length === 0 && <div className="empty-state">Nenhum acasalamento registrado.</div>}
+          </div>
+        )}
       </div>
 
-      {/* Modal */}
       {showForm && (
         <div className="modal-backdrop">
           <div className="modal">
@@ -238,8 +268,8 @@ export default function Acasalamentos() {
                 <textarea className="form-control" value={form.observacoes} onChange={(e) => set("observacoes", e.target.value)} rows={2} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Salvar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Salvando..." : "Salvar"}</button>
               </div>
             </form>
           </div>

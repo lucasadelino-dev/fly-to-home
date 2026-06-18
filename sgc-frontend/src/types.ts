@@ -67,10 +67,16 @@ export interface Acasalamento {
 
 export interface DashboardData {
   totalPombos: number;
+  pombosTotal: number;
   emTratamento: number;
   totalCompeticoes: number;
   vitorias: number;
   taxaVitoria: number;
+  acasalamentosAtivos: number;
+  totalFilhotes: number;
   competicoesPorMes: { year: number; month: number; total: number }[];
+  saudePorMes: { year: number; month: number; concluidos: number; agendados: number }[];
+  proximasCompeticoes: { nome: string; data: string; local: string }[];
+  topPerformers: { nome: string; anilha: string; vitorias: number }[];
   atividadesRecentes: { tipo: string; descricao: string; data: string }[];
 }

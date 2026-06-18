@@ -42,18 +42,42 @@ public class SaudeController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(RegistroSaude registro)
     {
-        db.RegistrosSaude.Add(registro);
-        await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetById), new { id = registro.Id }, registro);
+        try
+        {
+            db.RegistrosSaude.Add(registro);
+            await db.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetById), new { id = registro.Id }, registro);
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = "Erro ao salvar o registro de saúde. Verifique os dados informados." });
+        }
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, RegistroSaude registro)
     {
-        if (id != registro.Id) return BadRequest();
-        db.Entry(registro).State = EntityState.Modified;
-        await db.SaveChangesAsync();
-        return NoContent();
+        if (id != registro.Id) return BadRequest(new { message = "ID inválido." });
+        var existing = await db.RegistrosSaude.FindAsync(id);
+        if (existing == null) return NotFound();
+
+        existing.PomboId = registro.PomboId;
+        existing.Tipo = registro.Tipo;
+        existing.Descricao = registro.Descricao;
+        existing.Data = registro.Data;
+        existing.ProximaDose = registro.ProximaDose;
+        existing.Status = registro.Status;
+        existing.Observacoes = registro.Observacoes;
+
+        try
+        {
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new { message = "Erro ao atualizar o registro de saúde." });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -61,8 +85,15 @@ public class SaudeController(AppDbContext db) : ControllerBase
     {
         var r = await db.RegistrosSaude.FindAsync(id);
         if (r == null) return NotFound();
-        db.RegistrosSaude.Remove(r);
-        await db.SaveChangesAsync();
-        return NoContent();
+        try
+        {
+            db.RegistrosSaude.Remove(r);
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "Não é possível remover este registro de saúde." });
+        }
     }
 }

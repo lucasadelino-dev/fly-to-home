@@ -1,6 +1,7 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 import type { Competicao, ResultadoCompeticao, Pombo } from "../types";
+import { toast } from "../toast";
 
 function IconClock() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
@@ -17,45 +18,87 @@ const MEDAL: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 export default function Competicoes() {
   const [competicoes, setCompeticoes] = useState<Competicao[]>([]);
   const [pombos, setPombos] = useState<Pombo[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showResultForm, setShowResultForm] = useState<number | null>(null);
   const [form, setForm] = useState({ nome: "", data: "", local: "", distancia: "", observacoes: "" });
-  const [resultForm, setResultForm] = useState({ pomboId: "", posicao: "", velocidade: "", tempo: "", observacoes: "" });
+  const [resultForm, setResultForm] = useState({ pomboId: "", posicao: "", observacoes: "" });
 
-  const load = () => api.get<Competicao[]>("/competicoes").then((r) => setCompeticoes(r.data));
-  useEffect(() => { load(); api.get<Pombo[]>("/pombos").then((r) => setPombos(r.data)); }, []);
+  const load = () =>
+    api.get<Competicao[]>("/competicoes").then((r) => setCompeticoes(r.data));
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      load(),
+      api.get<Pombo[]>("/pombos").then((r) => setPombos(r.data)),
+    ])
+      .catch(() => toast.error("Erro ao carregar as competições."))
+      .finally(() => setLoading(false));
+  }, []);
 
   const saveCompeticao = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.post("/competicoes", { ...form, distancia: Number(form.distancia) });
-    setShowForm(false);
-    setForm({ nome: "", data: "", local: "", distancia: "", observacoes: "" });
-    load();
+    setSaving(true);
+    try {
+      await api.post("/competicoes", { ...form, distancia: Number(form.distancia) });
+      toast.success("Competição criada com sucesso.");
+      setShowForm(false);
+      setForm({ nome: "", data: "", local: "", distancia: "", observacoes: "" });
+      await load();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao salvar a competição.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const del = async (id: number) => {
     if (!confirm("Excluir competição?")) return;
-    await api.delete(`/competicoes/${id}`);
-    load();
+    try {
+      await api.delete(`/competicoes/${id}`);
+      toast.success("Competição removida.");
+      await load();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao remover a competição.";
+      toast.error(msg);
+    }
   };
 
   const saveResultado = async (e: React.FormEvent, compId: number) => {
     e.preventDefault();
-    await api.post(`/competicoes/${compId}/resultados`, {
-      pomboId: Number(resultForm.pomboId),
-      posicao: resultForm.posicao ? Number(resultForm.posicao) : null,
-      observacoes: resultForm.observacoes || null,
-    });
-    setShowResultForm(null);
-    setResultForm({ pomboId: "", posicao: "", velocidade: "", tempo: "", observacoes: "" });
-    load();
+    setSaving(true);
+    try {
+      await api.post(`/competicoes/${compId}/resultados`, {
+        pomboId: Number(resultForm.pomboId),
+        posicao: resultForm.posicao ? Number(resultForm.posicao) : null,
+        observacoes: resultForm.observacoes || null,
+      });
+      toast.success("Resultado adicionado.");
+      setShowResultForm(null);
+      setResultForm({ pomboId: "", posicao: "", observacoes: "" });
+      await load();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao adicionar resultado.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const delResultado = async (resultadoId: number) => {
     if (!confirm("Remover resultado?")) return;
-    await api.delete(`/competicoes/resultados/${resultadoId}`);
-    load();
+    try {
+      await api.delete(`/competicoes/resultados/${resultadoId}`);
+      toast.success("Resultado removido.");
+      await load();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? "Erro ao remover o resultado.";
+      toast.error(msg);
+    }
   };
 
   const totalComps = competicoes.length;
@@ -74,7 +117,6 @@ export default function Competicoes() {
         </div>
       </div>
 
-      {/* KPI */}
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="kpi-left"><span className="kpi-label">Competições</span><span className="kpi-value">{totalComps}</span></div>
@@ -105,14 +147,12 @@ export default function Competicoes() {
           <div className="kpi-left"><span className="kpi-label">Taxa de Vitória</span><span className="kpi-value">{taxa}%</span></div>
           <div className="kpi-icon" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24" }}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M6 9H4.5a2.5 2.5 0 0 0 0 5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 1 0 5H18"/>
-              <path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
             </svg>
           </div>
         </div>
       </div>
 
-      {/* Competition list card */}
       <div className="table-card">
         <div className="section-header">
           <h2>Todas as Competições</h2>
@@ -137,7 +177,7 @@ export default function Competicoes() {
                 </div>
                 <div className="form-group">
                   <label>Distância (km)</label>
-                  <input type="number" className="form-control" value={form.distancia} onChange={(e) => setForm((f) => ({ ...f, distancia: e.target.value }))} />
+                  <input type="number" min={0} className="form-control" value={form.distancia} onChange={(e) => setForm((f) => ({ ...f, distancia: e.target.value }))} />
                 </div>
               </div>
               <div className="form-row">
@@ -146,96 +186,100 @@ export default function Competicoes() {
                   <input className="form-control" value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))} />
                 </div>
                 <div className="form-group form-group-btns">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
-                  <button type="submit" className="btn btn-primary">Salvar</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Salvando..." : "Salvar"}</button>
                 </div>
               </div>
             </form>
           </div>
         )}
 
-        <div className="comp-list">
-          {competicoes.map((c) => (
-            <div key={c.id} className="comp-card">
-              <div className="comp-header" onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}>
-                <div className="comp-info">
-                  <span className="comp-name">{c.nome}</span>
-                  <div className="comp-meta">
-                    <span><IconClock /> {new Date(c.data).toLocaleDateString("pt-BR")}</span>
-                    {c.local && <span><IconPin /> {c.local}</span>}
-                    {c.distancia && <span><IconDist /> {c.distancia}km</span>}
+        {loading ? (
+          <div className="loading" style={{ padding: "48px" }}>Carregando...</div>
+        ) : (
+          <div className="comp-list">
+            {competicoes.map((c) => (
+              <div key={c.id} className="comp-card">
+                <div className="comp-header" onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}>
+                  <div className="comp-info">
+                    <span className="comp-name">{c.nome}</span>
+                    <div className="comp-meta">
+                      <span><IconClock /> {new Date(c.data).toLocaleDateString("pt-BR")}</span>
+                      {c.local && <span><IconPin /> {c.local}</span>}
+                      {c.distancia > 0 && <span><IconDist /> {c.distancia}km</span>}
+                    </div>
                   </div>
-                </div>
-                <div className="comp-right">
-                  <span className={`badge ${isUpcoming(c) ? "badge-agendado" : "badge-concluido"}`}>
-                    {isUpcoming(c) ? "Próxima" : "Finalizada"}
-                  </span>
-                  <button className="icon-btn icon-btn-danger" onClick={(e) => { e.stopPropagation(); del(c.id); }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {expandedId === c.id && (
-                <div className="comp-body">
-                  <div className="comp-participants-header">
-                    <span className="comp-participants-label">Participantes:</span>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setShowResultForm(showResultForm === c.id ? null : c.id)}>
-                      + Adicionar
+                  <div className="comp-right">
+                    <span className={`badge ${isUpcoming(c) ? "badge-agendado" : "badge-concluido"}`}>
+                      {isUpcoming(c) ? "Próxima" : "Finalizada"}
+                    </span>
+                    <button className="icon-btn icon-btn-danger" onClick={(e) => { e.stopPropagation(); del(c.id); }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                      </svg>
                     </button>
                   </div>
-
-                  {showResultForm === c.id && (
-                    <form className="result-inline-form" onSubmit={(e) => saveResultado(e, c.id)}>
-                      <select className="form-control" required value={resultForm.pomboId} onChange={(e) => setResultForm((f) => ({ ...f, pomboId: e.target.value }))}>
-                        <option value="">Pombo…</option>
-                        {pombos.map((p) => <option key={p.id} value={p.id}>{p.nome} ({p.anilha})</option>)}
-                      </select>
-                      <input type="number" className="form-control" placeholder="Posição" value={resultForm.posicao}
-                        onChange={(e) => setResultForm((f) => ({ ...f, posicao: e.target.value }))} />
-                      <input className="form-control" placeholder="Observações" value={resultForm.observacoes}
-                        onChange={(e) => setResultForm((f) => ({ ...f, observacoes: e.target.value }))} />
-                      <button type="submit" className="btn btn-primary btn-sm">OK</button>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowResultForm(null)}>✕</button>
-                    </form>
-                  )}
-
-                  <div className="participant-grid">
-                    {(c.resultados ?? [])
-                      .sort((a, b) => (a.posicao ?? 999) - (b.posicao ?? 999))
-                      .map((r: ResultadoCompeticao) => (
-                        <div key={r.id} className={`participant-card ${r.posicao === 1 ? "winner" : ""}`}>
-                          <div className="participant-info">
-                            <span className="participant-anilha">{r.pombo?.anilha || `#${r.pomboId}`}</span>
-                            <span className="participant-nome">{r.pombo?.nome || "—"}</span>
-                            {r.observacoes && <span className="participant-obs">{r.observacoes}</span>}
-                          </div>
-                          <div className="participant-right">
-                            {r.posicao && (
-                              <span className="participant-pos">
-                                {MEDAL[r.posicao] ? MEDAL[r.posicao] : `#${r.posicao}`}
-                              </span>
-                            )}
-                            <button className="icon-btn icon-btn-danger" onClick={() => delResultado(r.id)}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    {(c.resultados ?? []).length === 0 && (
-                      <div className="empty-state" style={{ padding: "12px 0" }}>Nenhum participante registrado.</div>
-                    )}
-                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-          {competicoes.length === 0 && <div className="empty-state">Nenhuma competição registrada.</div>}
-        </div>
+
+                {expandedId === c.id && (
+                  <div className="comp-body">
+                    <div className="comp-participants-header">
+                      <span className="comp-participants-label">Participantes:</span>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setShowResultForm(showResultForm === c.id ? null : c.id)}>
+                        + Adicionar
+                      </button>
+                    </div>
+
+                    {showResultForm === c.id && (
+                      <form className="result-inline-form" onSubmit={(e) => saveResultado(e, c.id)}>
+                        <select className="form-control" required value={resultForm.pomboId} onChange={(e) => setResultForm((f) => ({ ...f, pomboId: e.target.value }))}>
+                          <option value="">Pombo…</option>
+                          {pombos.map((p) => <option key={p.id} value={p.id}>{p.nome} ({p.anilha})</option>)}
+                        </select>
+                        <input type="number" min={1} className="form-control" placeholder="Posição" value={resultForm.posicao}
+                          onChange={(e) => setResultForm((f) => ({ ...f, posicao: e.target.value }))} />
+                        <input className="form-control" placeholder="Observações" value={resultForm.observacoes}
+                          onChange={(e) => setResultForm((f) => ({ ...f, observacoes: e.target.value }))} />
+                        <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>OK</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowResultForm(null)}>✕</button>
+                      </form>
+                    )}
+
+                    <div className="participant-grid">
+                      {(c.resultados ?? [])
+                        .sort((a, b) => (a.posicao ?? 999) - (b.posicao ?? 999))
+                        .map((r: ResultadoCompeticao) => (
+                          <div key={r.id} className={`participant-card ${r.posicao === 1 ? "winner" : ""}`}>
+                            <div className="participant-info">
+                              <span className="participant-anilha">{r.pombo?.anilha || `#${r.pomboId}`}</span>
+                              <span className="participant-nome">{r.pombo?.nome || "—"}</span>
+                              {r.observacoes && <span className="participant-obs">{r.observacoes}</span>}
+                            </div>
+                            <div className="participant-right">
+                              {r.posicao && (
+                                <span className="participant-pos">
+                                  {MEDAL[r.posicao] ?? `#${r.posicao}`}
+                                </span>
+                              )}
+                              <button className="icon-btn icon-btn-danger" onClick={() => delResultado(r.id)}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      {(c.resultados ?? []).length === 0 && (
+                        <div className="empty-state" style={{ padding: "12px 0" }}>Nenhum participante registrado.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {competicoes.length === 0 && <div className="empty-state">Nenhuma competição registrada.</div>}
+          </div>
+        )}
       </div>
     </div>
   );
